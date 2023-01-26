@@ -23,3 +23,13 @@ nmap -sV -p- -oN nmap_output.txt $1
 
 # Vulners
 vulners -sV -p- -oN vulners_output.txt $1
+
+$ CF-Check
+echo "$1" | cf-check
+
+"""
+The goal is that you don't need to do a port scan if it's proven that the IP is owned by Cloudflare.
+"""
+
+subfinder -silent -d $1 | filter-resolved | cf-check | sort -u | naabu -silent | httprobe
+
