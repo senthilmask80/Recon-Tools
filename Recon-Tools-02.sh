@@ -33,3 +33,8 @@ The goal is that you don't need to do a port scan if it's proven that the IP is 
 
 subfinder -silent -d $1 | filter-resolved | cf-check | sort -u | naabu -silent | httprobe
 
+# Javascript recon when target is using Graphql
+# find all embedded graphql queries/mutations using bash one liner
+
+cat jsfile.js | nestle -regex '(query|mutation)\s+[a-zA-Z]+[0-9]*[a-zA-Z]+(\([^(\(|\))]+\))*\s*[{:nested:}]' | sed 's/\\n/\n/g'
+
