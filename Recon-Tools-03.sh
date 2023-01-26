@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export PATH:PATH:/home/pragnya/Recon-Bin:/home/pragnya/Recon-Tools
+PATH="$PATH:$HOME/Recon-Bin:$HOME/Recon-Tools"
 
 # Colors
 BOLD="\e[1m"
