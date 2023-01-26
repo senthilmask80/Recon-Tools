@@ -1,0 +1,11 @@
+Recon_Profile for create your own parameters wordlist @1ndianl33t
+
+Tool :- waybackurls & unfur @ TomNomNom
+
+$ nano .bash_profile
+
+paramlist() { waybackurls $1 | grep "?" | unfurl keys | sort -u | tee -a paramlist.txt }
+
+$ source .bash_profile
+
+$ paramlist target.com
