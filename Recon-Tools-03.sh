@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PATH:PATH:/home/pragnya/Recon-Bin:/home/pragnya/Recon-Tools
+
 # Colors
 BOLD="\e[1m"
 NORMAL="\e[0m"
