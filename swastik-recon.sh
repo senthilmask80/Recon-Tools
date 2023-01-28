@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. ./Recon-Tools.cfg
+. ./swastik.cfg
 
 #if [[ $EUID -ne 0 ]]; then
 #   echo "This script must be run as root" 
