@@ -8,10 +8,9 @@
 #fi
 
 domain=$1
-url=$2
 
 Usage() { #instant
-       echo -e "Usage: ||| ./Recon-Tools-New01.sh -d 'DomainName' "
+       echo -e "Usage: ||| ./Recon-Tools-New01.sh 'DomainName' "
        exit 1
 }
 
@@ -80,9 +79,6 @@ combinesub(){
     cat ./$domain/subdomain/*.txt | "$fold1/anew" -q ./$domain/subdomain/all_subdomain.txt
 }
 
-test(){
-     python3 "$fold1/subscraper-2.2.1/subscraper.py" --all $domain -r ./$domain/subdomain/subscraper.txt
-}
 
 # HTTProbe
 #echo -e "${GREEN}[+]Starting HTTProbe...!!!"
@@ -106,10 +102,10 @@ test(){
 #echo "Running Aquatone to take screenshots of the discovered URLs...!!!!";
 #cat waybackurls_results.txt amass_results.txt amass_results.txt subfinder_results.txt | sort -u | "$fold/aquatone" -screenshot-timeout 19 -out aquatone_screenshots/
 
-#sub_passive
-#sub_crt
-#subactive
+sub_passive
+sub_crt
+subactive
 combinesub
-#test
+
 
 echo -e "${GREEN}[+]Finishing The Enumeration OR The Reconnaisses...!!!"
