@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. ./swastik.cfg
+. ./Recon-Tools.cfg
 
 #if [[ $EUID -ne 0 ]]; then
 #   echo "This script must be run as root" 
@@ -8,9 +8,10 @@
 #fi
 
 domain=$1
+url=$2
 
 Usage() { #instant
-       echo -e "Usage: ||| ./Recon-Tools-New01.sh 'DomainName' "
+       echo -e "Usage: ||| ./Recon-Tools-New01.sh -d 'DomainName' "
        exit 1
 }
 
@@ -24,11 +25,11 @@ mkdir -p $domain
 #mkdir -p $domain/osint-info
 mkdir -p $domain/subdomain
 #mkdir -p $domain/ips
-#mkdir -p $domain/subdomain-takeover
+mkdir -p $domain/subdomain-takeover
 #mkdir -p $domain/ports
-#mkdir -p $domain/alive-subdomain
+mkdir -p $domain/alive-subdomain
 #mkdir -p $domain/visual-recon
-#mkdir -p $domain/content-discovery
+mkdir -p $domain/content-discovery
 #mkdir -p $domain/parameters
 #mkdir -p $domain/js-files
 #mkdir -p $domain/github
@@ -50,17 +51,18 @@ echo -e "${GREEN}[+]Start Subdomain Enumeretion...!!!"
 
 sub_passive(){
     "$fold1/assetfinder" --subs-only $domain | "$fold1/anew" -q ./$domain/subdomain/assetfinder.txt
-    "$fold1/subfinder" -silent -d $domain -all -t $subfinder_threads | "$fold1/anew" -q ./$domain/subdomain/subfinder.txt
-    "$fold1/findomain" -t $domain --external-subdomains -r -u ./$domain/subdomain/findomain.txt
-    python3 "$fold1/sublist3r" -d $domain -t $threads -v -o ./$domain/subdomain/sublist3r.txt
+    "$fold1/subfinder" -silent -d $domain -all -t $THREADS | "$fold1/anew" -q ./$domain/subdomain/subfinder.txt
+    "$fold1/findomain" -t $domain -u ./$domain/subdomain/findomain.txt
+    python3 "$fold1/sublist3r" -d $domain -t $THREADS -v -o ./$domain/subdomain/sublist3r.txt
     "$fold1/amass" enum -passive -d $domain -o ./$domain/subdomain/amass.txt
-    # sudomy -d $domain --all | tee ./$domain/subdomain/sudomy.txt
+    "$fold1/Sudomy-1.2.0/sudomy" -d $domain --all | tee ./$domain/subdomain/sudomy.txt
     "$fold1/waybackurls" $domain | "$fold1/unfurl" -u domains | "$fold1/anew" -q ./$domain/subdomain/waybackurls.txt
-    "$fold1/knockpy" $domain -th $threads --no-http-code 404 500 530 -o ./$domain/subdomain/knock.txt
+    "$fold1/knockpy" $domain -th $threads --no-http-code 404 500 530 -o ./$domain/subdomain/knockpy
     "$fold1/SubDog/subdog" -d $domain >> ./$domain/subdomain/subdog.txt
     python3 "$fold1/subscraper-2.2.1/subscraper.py" -all -r ./$domain/subdomain/subscraper.txt
-    "$fold1/anubis" -tip $domain -o ./$domain/subdomain/anubis_result_${date +%F}.txt
-    # python3 ~/tools/github-subdomains.py -t $GITHUB_API_TOKEN -d $domain | anew -q ./$domain/subdomain/github.txt
+    "$fold1/anubis" -tip $domain -o ./$domain/subdomain/anubis_result
+    "$fold1/SubDomainizer/SubDomainizer.py" -u $domain -o ./$domain/subdomain/subdomainizer.txt
+    python3 "$fold1/github-subdomains.py" -t $GITHUB_API_TOKEN -d $domain | anew -q ./$domain/subdomain/github.txt
 }
 
 sub_crt(){
@@ -68,9 +70,9 @@ sub_crt(){
 }
 
 subactive(){
-   # "$fold1/ffuf" -w $fuzz_wordlists -u https://FUZZ.$domain -t $threads -H $HEADER -mc 200 -r -v | grep "| URL |" | awk '{print $4}' | sed 's/^http[s]:\/\///g' | "$fold1/anew" -q ./$domain/subdomain/ffuf.txt
-    "$fold1/gobuster" dns -d $domain -z -q -t $threads -w $gobuster_wordlists | awk '{$1=""; print $2}' | "$fold1/anew" -q ./$domain/subdomain/gobuster.txt
-   # "$fold1/amass" enum  -src -ip -brute -min-for-recursive 2 -d $domain -o ./$domain/subdomain/amass_passive.txt
+   # "$fold1/ffuf" -w $FUZZ_WORDLIST -u https://FUZZ.$domain -t $threads -H $HEADER -mc 200 -r -v | grep "| URL |" | awk '{print $4}' | sed 's/^http[s]:\/\///g' | "$fold1/anew" -q ./$domain/subdomain/ffuf.txt
+    "$fold1/gobuster" dns -d $domain -z -q -t $threads -w $GOBUSTER_WORDLIST | awk '{$1=""; print $2}' | "$fold1/anew" -q ./$domain/subdomain/gobuster.txt
+    # "$fold1/amass" enum  -src -ip -brute -min-for-recursive 2 -d $domain & sleep 30 kill $! -o ./$domain/subdomain/amass_passive.txt
    # chaos -d $domain
 }
 
@@ -78,6 +80,45 @@ subactive(){
 combinesub(){
     cat ./$domain/subdomain/*.txt | "$fold1/anew" -q ./$domain/subdomain/all_subdomain.txt
 }
+
+
+sub_dns(){
+    cat ./$domain/subdomain/all_subdomain.txt | "$fold1/dnsx" -r $RESOLVERS_TRUSTED -a -aaaa -cname -ns -ptr -mx -soa -silent -retry 3 -json -o ./$domain/subdomain/subdomain_dnsregs.json
+    cat ./$domain/subdomain/subdomain_dnsregs.json | jq -r 'try .a[], try .aaaa[], try .cname[], try .ns[], try .ptr[], try .mx[], try .soa[]' | grep ".$domain$" | "$fold1/anew" -q ./$domain/subdomain/dnsx_dns_subdomains.txt
+
+    "$fold1/puredns" resolve ./$domain/subdomain/dnsx_dns_subdomains.txt -r $DNSVALIDATOR_RESOLVERS | "$fold1/anew" -q ./$domain/subdomain/dnsx_resolve_subdomains.txt
+}
+
+sub_brute(){
+    # Dns Bruteforcing
+    "$fold1/puredns" bruteforce $ASSETNOTE_DNS_WORDLIST $domain -r $DNSVALIDATOR_RESOLVERS | "$fold1/anew" -q ./$domain/subdomain/puredns_brute_subdomain.txt
+    "$fold1/puredns" resolve ./$domain/subdomain/puredns_brute_subdomain.txt -r $DNSVALIDATOR_RESOLVERS | "$fdold1/anew" -q ./$domain/subdomain/puredns_resolve_subdomain.txt
+
+    # Removing Unnecassery files
+    # rm -rf ./$domain/subdomain/gotator_subdomains.txt
+}
+
+sub_scraping(){
+    keydomain=${domain%%.*}
+    "$fold1/gospider" -S ./$domain/subdomain/all_alive.txt --js --subs -t $GOSPIDER_THREADS -c 10 -u -d 3 --sitemap --robots -w -r | "$fold1/anew" -q ./$domain/content-discovery/gospider_urls.txt
+    cat ./$domain/content-discovery/gospider_urls.txt | grep -Eo 'https?://[^ ]+' | sed 's/]$//' | "$fold1/unfurl" -u domains | grep "$keydomain" | "$fold1/anew" -q ./$domain/subdomain/gospider_subdomains_DNS.txt
+    "$fold1/puredns" resolve ./$domain/subdomain/gospider_subdomains_DNS.txt -r $DNSVALIDATOR_RESOLVERS | "$fold1/anew" -q ./$domain/subdomain/gospider_resolve_subdomains.txt
+
+}
+
+sub_permut(){
+    # Permutation/Alterations
+    "$fold1/gotator" -sub ./$domain/subdomain/all_subdomain.txt -perm $PERMUTATIONS_WORDLIST -depth 1 -numbers 10 -mindup -adv -md -t $GOTATOR_THREADS -silent | "$fold1/anew" -q ./$domain/subdomain/gotator_subdomains.txt
+    "$fold1/puredns" resolve ./$domain/subdomain/gotator_subdomains.txt -r $DNSVALIDATOR_RESOLVERS | "$fold1/anew" -q ./$domain/subdomain/gotator_resolve_subdomain.txt
+}
+
+
+subtakeover(){
+    "$fold1/subjack" -w ./$domain/subdomain/all_subdomain.txt -t $threads -timeout 30 -o ./$domain/subdomain-takeover/subjack.txt -ssl -c "$fold2"/fingerprints.json
+    # dig $domain
+}
+
+
 
 
 # HTTProbe
@@ -106,6 +147,10 @@ sub_passive
 sub_crt
 subactive
 combinesub
-
+sub_dns
+sub_brute
+sub_scraping
+sub_permut
+subtakeover
 
 echo -e "${GREEN}[+]Finishing The Enumeration OR The Reconnaisses...!!!"
