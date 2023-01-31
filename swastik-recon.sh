@@ -2,10 +2,58 @@
 
 . ./Recon-Tools.cfg
 
+clear
+
+banner
+sleep 3
+
+echo
+echo "Swastik Web Scanner, Created by Pragnya IT Ingra	"
+echo
+echo " NO:	Name:	"
+echo "----	-----	"
+echo
+echo " 01	Footprint Domains	"
+echo " 02	Subdomain Enumeration	"
+echo " 03	Certificate Enumeration	"
+echo " 04	Ports Scan		"
+echo " 05	Visual Identification	"
+echo " 06	WAF Identification	"
+echo " 07	Github Recon		"
+echo " 08	Wayback Enumeration	"
+echo " 09	Javascript Endpoints	"
+echo " 10	S3-Bucket-Bruteforcing	"
+echo " 11	Content Discovery	"
+echo " 12	Web-Application-Attacks	SSRF	"
+echo " 13	Web-Application-Attacks	CORS	"
+echo " 14	Web-Application-Attacks	CSRF	"
+echo " 15	Web-Application-Attacks	XSS	"
+echo " 16	Web-Application-Attacks	Command Injection	"
+echo " 17	Web-Application-Attacks	Open Redirect		"
+echo
+echo " 98	Help			"
+echo " 99	Report Bug		"
+echo " 00	Close and Exit Tools	"
+echo
+echo -n " ?:- Your Option:-   "
+read userinput
+echo
+
 #if [[ $EUID -ne 0 ]]; then
 #   echo "This script must be run as root" 
 #   exit 1
 #fi
+
+    if [[ -n "$userinput" ]] ; then
+
+        nodigits="$(echo $userinput | sed 's/[[:digit:]]//g')"
+
+        if [[ ! -z $nodigits ]] ; then
+
+            print "Invalid number format! Only digits, no commas, spaces, etc." 
+
+        fi
+    fi
 
 domain=$1
 url=$2
@@ -142,6 +190,7 @@ subtakeover(){
 # Use Aquatone to take screenshots of the discovered URLs
 #echo "Running Aquatone to take screenshots of the discovered URLs...!!!!";
 #cat waybackurls_results.txt amass_results.txt amass_results.txt subfinder_results.txt | sort -u | "$fold/aquatone" -screenshot-timeout 19 -out aquatone_screenshots/
+
 
 sub_passive
 sub_crt
