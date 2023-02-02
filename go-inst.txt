@@ -1,0 +1,783 @@
+#!/bin/bash
+
+# Installing latest Golang version
+version=$(curl -L -s https://golang.org/VERSION?m=text)
+#version="go1.17.6"
+printf "${bblue} Running: Installing/Updating Golang ${reset}\n\n"
+if [ "$install_golang" = "true" ]; then
+    if [[ $(eval type go $DEBUG_ERROR | grep -o 'go is') == "go is" ]] && [[ "$version" = $(go version | cut -d " " -f3) ]]
+        then
+            printf "${bgreen} Golang is already installed and updated ${reset}\n\n"
+        else
+            eval $SUDO rm -rf /usr/local/go $DEBUG_STD
+            if [ "True" = "$IS_ARM" ]; then
+                if [ "True" = "$RPI_3" ]; then
+                    eval wget "https://dl.google.com/go/${version}.linux-armv6l.tar.gz" $DEBUG_STD
+                    eval $SUDO tar -C /usr/local -xzf "${version}.linux-armv6l.tar.gz" $DEBUG_STD
+                elif [ "True" = "$RPI_4" ]; then
+                    eval wget "https://dl.google.com/go/${version}.linux-arm64.tar.gz" $DEBUG_STD
+                    eval $SUDO tar -C /usr/local -xzf "${version}.linux-arm64.tar.gz" $DEBUG_STD
+                fi
+            elif [ "True" = "$IS_MAC" ]; then
+                if [ "True" = "$IS_ARM" ]; then
+                    eval wget "https://dl.google.com/go/${version}.darwin-arm64.tar.gz" $DEBUG_STD
+                    eval $SUDO tar -C /usr/local -xzf "${version}.darwin-arm64.tar.gz" $DEBUG_STD
+                else
+                    eval wget "https://dl.google.com/go/${version}.darwin-amd64.tar.gz" $DEBUG_STD
+                    eval $SUDO tar -C /usr/local -xzf "${version}.darwin-amd64.tar.gz" $DEBUG_STD
+                fi
+            else
+                eval wget "https://dl.google.com/go/${version}.linux-amd64.tar.gz" $DEBUG_STD
+                eval $SUDO tar -C /usr/local -xzf "${version}.linux-amd64.tar.gz" $DEBUG_STD
+            fi
+            eval $SUDO ln -sf /usr/local/go/bin/go /usr/local/bin/
+            #rm -rf $version*
+            export GOROOT=/usr/local/go
+            export GOPATH=$HOME/go
+            export PATH=$GOPATH/bin:$GOROOT/bin:$HOME/.local/bin:$PATH
+cat << EOF >> ~/"${profile_shell}"
+# Golang vars
+export GOROOT=/usr/local/go
+export GOPATH=\$HOME/go
+export PATH=\$GOPATH/bin:\$GOROOT/bin:\$HOME/.local/bin:\$PATH
+EOF
+fi
+else
+    printf "${byellow} Golang will not be configured according to the user's prefereneces (reconftw.cfg install_golang var)${reset}\n";
+fi
+
+[ -n "$GOPATH" ] || { printf "${bred} GOPATH env var not detected, add Golang env vars to your \$HOME/.bashrc or \$HOME/.zshrc:\n\n export GOROOT=/usr/local/go\n export GOPATH=\$HOME/go\n export PATH=\$GOPATH/bin:\$GOROOT/bin:\$PATH\n\n"; exit 1; }
+[ -n "$GOROOT" ] || { printf "${bred} GOROOT env var not detected, add Golang env vars to your \$HOME/.bashrc or \$HOME/.zshrc:\n\n export GOROOT=/usr/local/go\n export GOPATH=\$HOME/go\n export PATH=\$GOPATH/bin:\$GOROOT/bin:\$PATH\n\n"; exit 1; }
+
+printf "${bblue} Running: Installing requirements ${reset}\n\n"
+
+mkdir -p ~/.gf
+mkdir -p $tools
+mkdir -p ~/.config/notify/
+mkdir -p ~/.config/amass/
+mkdir -p ~/.config/nuclei/
+touch $dir/.github_tokens
+
+printf "${bblue} Running: Installing Golang tools (${#gotools[@]})${reset}\n\n"
+go env -w GO111MODULE=auto
+go_step=0
+for gotool in "${!gotools[@]}"; do
+    go_step=$((go_step + 1))
+    eval ${gotools[$gotool]} $DEBUG_STD
+    exit_status=$?
+    if [ $exit_status -eq 0 ]
+    then
+        printf "${yellow} $gotool installed (${go_step}/${#gotools[@]})${reset}\n"
+    else
+        printf "${red} Unable to install $gotool, try manually (${go_step}/${#gotools[@]})${reset}\n"
+        double_check=true
+    fi
+done
+
+printf "${bblue}\n Running: Installing repositories (${#repos[@]})${reset}\n\n"
+
+
+echo "-----------------------------------------"
+echo -e "${BOLD}${LIGHT_YELLOW}[~] Installing go tools${NORMAL}"
+echo "-----------------------------------------"
+
+# Check if the tool exists in $PATH before installing it
+
+if ! testcmd amass; then
+    export GO111MODULE=on
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing amass...${NORMAL}"
+    go get -u github.com/OWASP/Amass/v3/...
+	go install -u github.com/OWASP/Amass/v3/...
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing amass...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd assetfinder; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing assetfinder...${NORMAL}"
+    go install github.com/tomnomnom/assetfinder@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing assetfinder...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd subfinder; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subfinder...${NORMAL}"
+    go get github.com/projectdiscovery/subfinder/cmd/subfinder
+	go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+    echo -e "${RED}[+] Setting up API keys for subfinder...${RESET}"
+    # Set your API keys here
+    ~/go/bin/subfinder --set-config VirustotalAPIKey=<API-KEY-HERE>
+    ~/go/bin/subfinder --set-config PassivetotalUsername=<API-KEY-HERE>,PassivetotalKey=<API-KEY-HERE>
+    ~/go/bin/subfinder --set-config SecurityTrailsKey=<API-KEY-HERE>
+    ~/go/bin/subfinder --set-config RiddlerEmail=<API-KEY-HERE>,RiddlerPassword=<API-KEY-HERE>
+    ~/go/bin/subfinder --set-config CensysUsername=<API-KEY-HERE>,CensysSecret=<API-KEY-HERE>
+    ~/go/bin/subfinder --set-config ShodanAPIKey=<API-KEY-HERE>
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subfinder...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gobuster; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gobuster...${NORMAL}"
+    go get github.com/OJ/gobuster
+	go install github.com/OJ/gobuster@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gobuster...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd naabu; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing naabu...${NORMAL}"
+    go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing naabu...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd waybackurls; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing waybackurls...${NORMAL}"
+    go get -u github.com/tomnomnom/waybackurls
+	go install github.com/tomnomnom/hacks/waybackurls@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing waybackurls...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd waybackunifier; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing waybackunifier...${NORMAL}"
+    go get github.com/mhmdiaa/waybackunifier
+	go install github.com/mhmdiaa/waybackunifier@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing waybackunifier...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd fff; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing fff...${NORMAL}"
+    go get -u github.com/tomnomnom/hacks/fff
+	go install github.com/tomnomnom/hacks/fff@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing fff...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd httprobe; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing httprobe...${NORMAL}"
+    go get -u github.com/tomnomnom/httprobe
+	go install github.com/tomnomnom/httprobe@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing httprobe...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd meg; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing meg...${NORMAL}"
+    go get -u github.com/tomnomnom/meg
+	go install github.com/tomnomnom/meg@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing meg...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd unfurl; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing unfurl...${NORMAL}"
+    go get -u github.com/tomnomnom/unfurl
+	go install -v github.com/tomnomnom/unfurl@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing unfurl...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd filter-resolved; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing filter-resolved...${NORMAL}"
+    go get -u github.com/tomnomnom/hacks/filter-resolved
+	go install github.com/tomnomnom/hacks/filter-resolved@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing filter-resolved...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gowitness; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gowitness...${NORMAL}"
+    go get -u github.com/sensepost/gowitness
+	go install github.com/sensepost/gowitness@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gowitness...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd getJS; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing GetJS...${NORMAL}"
+    go get -u github.com/003random/getJS
+	go install github.com/003random/getJS@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing GetJS...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd subzy; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Subzy...${NORMAL}"
+    go get -u github.com/lukasikic/subzy
+	go install github.com/lukasikic/subzy@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Subzy...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd SubOver; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing SubOver...${NORMAL}"
+    go get -u github.com/Ice3man543/SubOver
+	go install github.com/Ice3man543/SubOver@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing SubOver...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd shhgit; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Shhgit...${NORMAL}"
+    go get github.com/eth0izzle/shhgit
+	go install github.com/eth0izzle/shhgit@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Shhgit...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gitrob; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitrob...${NORMAL}"
+    go get github.com/michenriksen/gitrob
+	go install github.com/micheriksen/gitrob@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitrob...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd ffuf; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ffuf...${NORMAL}"
+    go get github.com/ffuf/ffuf
+	go install github.com/ffuf/ffuf@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ffuf...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd unisub; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing unisub...${NORMAL}"
+    go get -u github.com/tomnomnom/hacks/unisub
+	go install github.com/tomnomnom/hacks/unisub@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing unisub...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gf; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gf...${NORMAL}"
+    go install github.com/tomnomnom/gf@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gf...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd aquatone; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing aquatone...${NORMAL}"
+    AQUATONE="aquatone-1.7.0.zip"
+    wget https://github.com/michenriksen/aquatone/releases/download/v1.7.0/aquatone_linux_amd64_1.7.0.zip -O $AQUATONE
+    unzip $AQUATONE -x LICENSE.txt -x README.md
+    sudo mv aquatone /usr/local/bin
+    rm -rf $AQUATONE
+fi
+
+if ! testcmd gorecon; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gorecon...${NORMAL}"
+	go get "github.com/devanshbatham/gorecon"
+    go install github.com/devanshbatham/gorecon@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gorecon...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd nuclei; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing nuclei...${NORMAL}"
+    go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing nuclei...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd subjack; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subjack...${NORMAL}"
+    go install github.com/haccer/subjack@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subjack...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd chaos-client; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing chaos-client...${NORMAL}"
+    go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing chaos-client...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dalfox; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dalfox...${NORMAL}"
+    go install github.com/hahwul/dalfox@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dalfox...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gau; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gau...${NORMAL}"
+    go install github.com/lc/gau@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gau...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd subjs; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subjs...${NORMAL}"
+    go install github.com/lc/subjs@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing subjs...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd hakcheckurl; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakcheckurl...${NORMAL}"
+    go install github.com/hakluke/hakcheckurl@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakcheckurl...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd hakrawler; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakrawler...${NORMAL}"
+    go install github.com/hakluke/hakrawler@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakrawler...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd hakrevdns; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakrevdns...${NORMAL}"
+    go install github.com/hakluke/hakrevdns@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing hakrevdns...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd httpx; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing httpx...${NORMAL}"
+    go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing httpx...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dnsprobe; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsprobe...${NORMAL}"
+    go install github.com/projectdiscovery/dnsprobe@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsprobe...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd shuffledns; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing shuffledns...${NORMAL}"
+    go install github.com/projectdiscovery/shuffledns/cmd/shuffledns@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing shuffledns...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd inception; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing inception...${NORMAL}"
+    go get -u github.com/proabiral/inception
+    go install github.com/proabiral/inception@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing inception...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd goaltdns; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing goaltdns...${NORMAL}"
+    go get -u github.com/subfinder/goaltdns
+    go install github.com/subfinder/goaltdns@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing goaltdns...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd rescope; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing rescope...${NORMAL}"
+    go get -u github.com/root4loot/rescope
+    go install github.com/root4loot/rescope@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing rescope...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd anew; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing anew...${NORMAL}"
+    go install -v github.com/tomnomnom/anew@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing anew...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd qsreplace; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing qsreplace...${NORMAL}"
+    go install -v github.com/tomnomnom/qsreplace@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing qsreplace...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd github-endpoints; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing github-endpoints...${NORMAL}"
+    go install -v github.com/gwen001/github-endpoints@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing github-endpoints...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd github-subdomains; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing github-subdomains...${NORMAL}"
+    go install -v github.com/gwen001/github-subdomains@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing github-subdomains...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd notify; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing notify...${NORMAL}"
+    go install -v github.com/projectdiscovery/notify/cmd/notify@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing notify...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dnsx; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsx...${NORMAL}"
+    go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsx...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd Gxss; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Gxss...${NORMAL}"
+    go install -v github.com/KathanP19/Gxss@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Gxss...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gospider; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gospider...${NORMAL}"
+    go install -v github.com/jaeles-project/gospider@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gospider...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd crlfuzz; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing crlfuzz...${NORMAL}"
+    go install -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing crlfuzz...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd puredns; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing puredns...${NORMAL}"
+    go install -v github.com/d3mondev/puredns/v2@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing puredns...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd interactsh-client; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing interactsh-client...${NORMAL}"
+    go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing interactsh-client...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd analyticsrelationships; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing analyticsrelationships...${NORMAL}"
+    go install -v github.com/Josue87/analyticsrelationships@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing analyticsrelationships...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gotator; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gotator...${NORMAL}"
+    go install -v github.com/Josue87/gotator@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gotator...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd roboxtractor; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing roboxtractor...${NORMAL}"
+    go install -v github.com/Josue87/roboxtractor@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing roboxtractor...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd mapcidr; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing mapcidr...${NORMAL}"
+    go install -v github.com/projectdiscovery/mapcidr/cmd/mapcidr@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing mapcidr...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd ipcdn; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ipcdn...${NORMAL}"
+    go install -v github.com/six2dez/ipcdn@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ipcdn...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dnstake; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnstake...${NORMAL}"
+    go install -v github.com/pwnesia/dnstake/cmd/dnstake@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnstake...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd tlsx; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing tlsx...${NORMAL}"
+    go install github.com/projectdiscovery/tlsx/cmd/tlsx@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing tlsx...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gitdorks-go; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitdorks-go...${NORMAL}"
+    go install -v github.com/damit5/gitdorks_go@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitdorks-go...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd smap; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing smap...${NORMAL}"
+    go install -v github.com/s0md3v/smap/cmd/smap@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing smap...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dsieve; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dsieve...${NORMAL}"
+    go install -v github.com/trickest/dsieve@master
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dsieve...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd inscope; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing inscope...${NORMAL}"
+    go install github.com/tomnomnom/hacks/inscope@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing inscope...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd rush; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing rush...${NORMAL}"
+    go install github.com/shenwei356/rush@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing rush...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd enumerepo; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing enumerepo...${NORMAL}"
+    go install github.com/trickest/enumerepo@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing enumerepo...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gitdorks_go; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitdorks_go...${NORMAL}"
+    go get github.com/damit5/gitdorks_go
+    go install github.com/damit5/gitdorks_go@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gitdorks_go...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd asnmap; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing asnmap...${NORMAL}"
+    go install github.com/projectdiscovery/asnmap/cmd/asnmap@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing asnmap...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd cariddi; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cariddi...${NORMAL}"
+    go install -v github.com/edoardottt/cariddi/cmd/cariddi@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cariddi...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd cero; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cero...${NORMAL}"
+    go install github.com/glebarez/cero@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cero...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd concurl; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing concurl...${NORMAL}"
+    go get -u github.com/tomnomnom/concurl
+    go install github.com/tomnomnom/concurl@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing concurl...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dirdar; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dirdar...${NORMAL}"
+    go get -u github.com/m4dm0e/dirdar
+    go install github.com/m4dm0e/dirdar@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dirdar...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd gron; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gron...${NORMAL}"
+    go install github.com/tomnomnom/gron@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing gron...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd go-dork; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing go-dork...${NORMAL}"
+    go install -v dw1.io/go-dork@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing go-dork...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd jaeles; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing jaeles...${NORMAL}"
+    go install github.com/jaeles-project/jaeles@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing jaeles...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd proxify; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing proxify...${NORMAL}"
+    go install -v github.com/projectdiscovery/proxify/cmd/proxify@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing proxify...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd urlhunter; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing urlhunter...${NORMAL}"
+    go install github.com/utkusen/urlhunter@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing urlhunter...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd corsme; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing corsme...${NORMAL}"
+    go get -u -v github.com/shivangx01b/CorsMe
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing corsme...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd kotana; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing kotana...${NORMAL}"
+    go install github.com/projectdiscovery/katana/cmd/katana@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing kotana...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd osmedeus; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing osmedeus...${NORMAL}"
+    go install -v github.com/j3ssie/osmedeus@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing osmedeus...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd http2smugl; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing http2smugl...${NORMAL}"
+    go install github.com/neex/http2smugl@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing http2smugl...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd plution; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing plution...${NORMAL}"
+    go get -u github.com/raverrr/plution
+    go install github.com/raverrr/plution@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing plution...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd ws-smuggler; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ws-smuggler...${NORMAL}"
+    go get -v github.com/hahwul/ws-smuggler
+    go install github.com/hahwul/ws-smuggler@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ws-smuggler...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd recursebuster; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing recursebuster...${NORMAL}"
+    go get -u github.com/c-sto/recursebuster
+    go install github.com/c-sto/recursebuster@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing recursebuster...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd GoLinkFinder; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing GoLinkFinder...${NORMAL}"
+    go install github.com/0xsha/GoLinkFinder@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing GoLinkFinder...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd linx; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing linx...${NORMAL}"
+    go install -v github.com/riza/linx/cmd/linx@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing linx...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd cf-check; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cf-check...${NORMAL}"
+    go install github.com/dwisiswant0/cf-check@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cf-check...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd headi; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing headi...${NORMAL}"
+    go install github.com/mlcsec/headi@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing headi...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd s3reverse; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing s3reverse...${NORMAL}"
+    go get -u github.com/hahwul/s3reverse
+    go install github.com/hahwul/s3reverse@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing s3reverse...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd dnsobserver; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsobserver...${NORMAL}"
+    go get github.com/allyomalley/dnsobserver/...
+    go install github.com/allyomalley/dnsobserver/...@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing dnsobserver...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd cnames; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cnames...${NORMAL}"
+    go get -u github.com/cybercdh/cnames
+    go install github.com/cybercdh/cnames@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing cnames...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd urlgrab; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing urlgrab...${NORMAL}"
+    go get -u github.com/iamstoxe/urlgrab
+    go install github.com/iamstoxe/urlgrab@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing urlgrab...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd websocket-connection-smuggler; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing websocket-connection-smuggler...${NORMAL}"
+    go get -u github.com/c-bata/go-prompt
+    go install github.com/c-bata/go-prompt@latest
+    go get github.com/hahwul/websocket-connection-smuggler
+    go install github.com/hahwul/websocket-connection-smuggler@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing websocket-connection-smuggler...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd tko-subs; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing tko-subs...${NORMAL}"
+    go get github.com/bgentry/heroku-go
+    go install github.com/bgentry/heroku-go@latest
+    go get github.com/gocarina/gocsv
+    go install github.com/gocarina/gocsv@latest
+    go get github.com/google/go-github/github
+    go install github.com/google/go-github/github@latest
+    go get github.com/olekukonko/tablewriter
+    go install github.com/olekukonko/tablewriter@latest
+    go get golang.org/x/net/publicsuffix
+    go install golang.org/x/net/publicsuffix@latest
+    go get golang.org/x/oauth2
+    go install golang.org/x/oauth2@latest
+    go get github.com/miekg/dns
+    go install github.com/miekg/dns@latest
+    go get github.com/anshumanbh/tko-subs
+    go install github.com/anshumanbh/tko-subs@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing tko-subs...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd Web-Cache-Vulnerability; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Web-Cache-Vulnerability...${NORMAL}"
+    go install -v github.com/Hackmanit/Web-Cache-Vulnerability-Scanner@latest
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Web-Cache-Vulnerability...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+

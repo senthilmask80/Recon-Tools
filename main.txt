@@ -1,0 +1,335 @@
+#!/bin/bash
+
+STARTIME=$(date +%s)
+LOGFILE="install.log"
+TOOLS_DIR="$HOME/tools"
+
+# Create a tools directory 3d-party tools are stored
+mkdir -p $TOOLS_DIR
+
+
+#https://misc.flogisoft.com/bash/tip_colors_and_formatting
+
+BLINK='\e[5m'
+BOLD='\e[1m'
+LIGHT_GREEN='\e[92m'
+LIGHT_YELLOW='\e[93m'
+LIGHT_CYAN='\e[96m'
+NORMAL='\e[0m'
+RED='\e[31m'
+UNDERLINE='\e[4m'
+
+# ARM Detection
+if [ -f "/proc/cpuinfo" ]; then
+    if grep -q "Raspberry Pi 3"  /proc/cpuinfo; then
+        IS_ARM="True"
+        RPI_3="True"
+        RPI_4="False"
+    elif grep -q "Raspberry Pi 4"  /proc/cpuinfo; then
+        IS_ARM="True"
+        RPI_4="True"
+        RPI_3="False"
+    else
+        IS_ARM="False"
+    fi
+elif grep -iq "arm" <<< "$(/usr/bin/arch)";then
+    IS_ARM="True"
+else
+    IS_ARM="False"
+fi
+
+#Mac Osx Detecting
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    IS_MAC="True"
+else
+    IS_MAC="False"
+fi
+
+# Check Bash version
+#(bash --version | awk 'NR==1{print $4}' | cut -d'.' -f1) 2&>/dev/null || echo "Unable to get bash version, for MacOS run 'brew install bash' and rerun installer in a new terminal" && exit 1
+
+BASH_VERSION=$(bash --version | awk 'NR==1{print $4}' | cut -d'.' -f1)
+if [ "${BASH_VERSION}" -lt 4 ]; then
+     printf "${bred} Your Bash version is lower than 4, please update${reset}\n"
+     printf "%s Your Bash version is lower than 4, please update%s\n" "${bred}" "${reset}"
+    if [ "True" = "$IS_MAC" ]; then
+        printf "${yellow} For MacOS run 'brew install bash' and rerun installer in a new terminal${reset}\n\n"
+        exit 1;
+    fi
+fi
+
+printf "\n\n${bgreen}#######################################################################${reset}\n"
+printf "${bgreen} reconFTW installer/updater script ${reset}\n\n"
+printf "${yellow} This may take time. So, go grab a coffee! ${reset}\n\n"
+
+if [[ $(id -u | grep -o '^0$') == "0" ]]; then
+    SUDO=""
+else
+    if sudo -n false 2>/dev/null; then
+        printf "${bred} Is strongly recommended to add your user to sudoers${reset}\n"
+        printf "${bred} This will avoid prompts for sudo password in the middle of the installation${reset}\n"
+        printf "${bred} And more important, in the middle of the scan (needed for nmap SYN scan)${reset}\n\n"
+        printf "${bred} echo \"${USERNAME}  ALL=(ALL:ALL) NOPASSWD: ALL\" > /etc/sudoers.d/reconFTW${reset}\n\n"
+    fi
+    SUDO="sudo"
+fi
+
+install_apt(){
+    eval $SUDO apt update -y $DEBUG_STD
+    eval $SUDO DEBIAN_FRONTEND="noninteractive" apt install chromium-browser -y $DEBUG_STD
+    eval $SUDO DEBIAN_FRONTEND="noninteractive" apt install chromium -y $DEBUG_STD
+    eval $SUDO DEBIAN_FRONTEND="noninteractive" apt install python3 python3-pip build-essential gcc cmake ruby whois git curl libpcap-dev wget zip python3-dev pv dnsutils libssl-dev libffi-dev libxml2-dev libxslt1-dev zlib1g-dev nmap jq apt-transport-https lynx tor medusa xvfb libxml2-utils procps bsdmainutils libdata-hexdump-perl -y $DEBUG_STD
+    eval $SUDO systemctl enable tor $DEBUG_STD
+    curl https://sh.rustup.rs -sSf | sh -s -- -y >/dev/null 2>&1
+    eval source "$HOME/.cargo/env $DEBUG_STD"
+    eval cargo install ripgen $DEBUG_STD
+}
+
+install_brew(){
+    if brew --version &>/dev/null; then
+	printf "${bgreen} brew is already installed ${reset}\n\n"
+    else
+	/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+    eval brew update -$DEBUG_STD
+    eval brew install --cask chromium $DEBUG_STD
+    eval brew install bash coreutils python massdns jq gcc cmake ruby git curl libpcap-dev wget zip python3-dev pv dnsutils whois libssl-dev libffi-dev libxml2-dev libxslt1-dev zlib1g-dev nmap jq apt-transport-https lynx tor medusa xvfb libxml2-utils libdata-hexdump-perl gnu-getopt $DEBUG_STD
+    export PATH="/opt/homebrew/opt/gnu-getopt/bin:$PATH"
+    echo 'export PATH="/opt/homebrew/opt/gnu-getopt/bin:$PATH"' >> ~/.zshrc
+    eval brew services start tor $DEBUG_STD
+    brew install rustup
+    rustup-init
+    eval cargo install ripgen $DEBUG_STD
+}
+
+install_yum(){
+    eval $SUDO yum groupinstall "Development Tools" -y $DEBUG_STD
+    eval $SUDO yum install python3 python3-pip gcc cmake ruby git curl libpcap-dev wget whois zip python3-devel pv bind-utils libopenssl-devel libffi-devel libxml2-devel libxslt-devel zlib-devel nmap jq lynx tor medusa xorg-x11-server-xvfb -y $DEBUG_STD
+    curl https://sh.rustup.rs -sSf | sh -s -- -y >/dev/null 2>&1
+    eval source "$HOME/.cargo/env $DEBUG_STD"
+    eval cargo install ripgen $DEBUG_STD
+}
+
+install_pacman(){
+    eval $SUDO pacman -Sy install python python-pip base-devel gcc cmake ruby git curl libpcap whois wget zip pv bind openssl libffi libxml2 libxslt zlib nmap jq lynx tor medusa xorg-server-xvfb -y $DEBUG_STD
+    eval $SUDO systemctl enable --now tor.service $DEBUG_STD
+    curl https://sh.rustup.rs -sSf | sh -s -- -y >/dev/null 2>&1
+    eval source "$HOME/.cargo/env $DEBUG_STD"
+    eval cargo install ripgen $DEBUG_STD
+}
+
+eval git config --global --unset http.proxy $DEBUG_STD
+eval git config --global --unset https.proxy $DEBUG_STD
+
+printf "${bblue} Running: Looking for new reconFTW version${reset}\n\n"
+
+eval git fetch $DEBUG_STD
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+HEADHASH=$(git rev-parse HEAD)
+UPSTREAMHASH=$(git rev-parse "${BRANCH}@{upstream}")
+
+if [ "$HEADHASH" != "$UPSTREAMHASH" ]
+then
+    printf "${yellow} There is a new version, updating...${reset}\n\n"
+    if git status --porcelain | grep -q 'reconftw.cfg$'; then
+        mv reconftw.cfg reconftw.cfg_bck
+        printf "${yellow} reconftw.cfg has been backed up in reconftw.cfg_bck${reset}\n\n"
+    fi
+    eval git reset --hard $DEBUG_STD
+    eval git pull $DEBUG_STD
+    printf "${bgreen} Updated! Running new installer version...${reset}\n\n"
+else
+    printf "${bgreen} reconFTW is already up to date!${reset}\n\n"
+fi
+
+printf "${bblue} Running: Installing system packages ${reset}\n\n"
+if [ -f /etc/debian_version ]; then install_apt;
+elif [ -f /etc/redhat-release ]; then install_yum;
+elif [ -f /etc/arch-release ]; then install_pacman;
+elif [ "True" = "$IS_MAC" ]; then install_brew;
+elif [ -f /etc/os-release ]; then install_yum;  #/etc/os-release fall in yum for some RedHat and Amazon Linux instances
+fi
+
+if [ "True" = "$IS_ARM" ]; then
+    if [ "True" = "$RPI_3" ]; then
+        eval wget -N -c https://github.com/Edu4rdSHL/unimap/releases/latest/download/unimap-armv7 $DEBUG_STD
+        eval wget -N -c https://github.com/dwisiswant0/ppfuzz/releases/download/v1.0.1/ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz $DEBUG_STD
+        eval $SUDO tar -C /usr/local/bin/ -xzf ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO rm -rf ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO mv unimap-armv7 /usr/local/bin/unimap
+    elif [ "True" = "$RPI_4" ] || [ "True" = "$IS_MAC" ]; then
+        eval wget -N -c https://github.com/Edu4rdSHL/unimap/releases/latest/download/unimap-aarch64 $DEBUG_STD
+        eval wget -N -c https://github.com/dwisiswant0/ppfuzz/releases/download/v1.0.1/ppfuzz-v1.0.1-aarch64-unknown-linux-gnueabihf.tar.gz $DEBUG_STD
+        eval $SUDO tar -C /usr/local/bin/ -xzf ppfuzz-v1.0.1-aarch64-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO rm -rf ppfuzz-v1.0.1-aarch64-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO mv unimap-aarch64 /usr/local/bin/unimap
+    fi
+elif [ "True" = "$IS_MAC" ]; then
+    if [ "True" = "$IS_ARM" ]; then
+        eval wget -N -c https://github.com/Edu4rdSHL/unimap/releases/latest/download/unimap-armv7 $DEBUG_STD
+        eval wget -N -c https://github.com/dwisiswant0/ppfuzz/releases/download/v1.0.1/ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz $DEBUG_STD
+        eval $SUDO tar -C /usr/local/bin/ -xzf ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO rm -rf ppfuzz-v1.0.1-armv7-unknown-linux-gnueabihf.tar.gz  $DEBUG_STD
+        eval $SUDO mv unimap-armv7 /usr/local/bin/unimap
+    else
+        eval wget -N -c https://github.com/Edu4rdSHL/unimap/releases/latest/download/unimap-osx $DEBUG_STD
+        eval wget -N -c https://github.com/dwisiswant0/ppfuzz/releases/download/v1.0.1/ppfuzz-v1.0.1-x86_64-apple-darwin.tar.gz $DEBUG_STD
+        eval $SUDO tar -C /usr/local/bin/ -xzf ppfuzz-v1.0.1-x86_64-apple-darwin.tar.gz  $DEBUG_STD
+        eval $SUDO rm -rf ppfuzz-v1.0.1-x86_64-apple-darwin.tar.gz  $DEBUG_STD
+        eval $SUDO mv unimap-osx /usr/local/bin/unimap
+    fi
+else
+    eval wget -N -c https://github.com/Edu4rdSHL/unimap/releases/download/0.4.0/unimap-linux $DEBUG_STD
+    eval wget -N -c https://github.com/dwisiswant0/ppfuzz/releases/download/v1.0.1/ppfuzz-v1.0.1-x86_64-unknown-linux-musl.tar.gz $DEBUG_STD
+    eval $SUDO tar -C /usr/local/bin/ -xzf ppfuzz-v1.0.1-x86_64-unknown-linux-musl.tar.gz  $DEBUG_STD
+    eval $SUDO rm -rf ppfuzz-v1.0.1-x86_64-unknown-linux-musl.tar.gz  $DEBUG_STD
+    eval $SUDO mv unimap-linux /usr/local/bin/unimap
+fi
+eval $SUDO chmod 755 /usr/local/bin/unimap
+eval $SUDO strip -s /usr/local/bin/unimap $DEBUG_STD
+eval $SUDO chmod 755 /usr/local/bin/ppfuzz
+eval $SUDO strip -s /usr/local/bin/ppfuzz $DEBUG_STD
+eval notify $DEBUG_STD
+eval subfinder $DEBUG_STD
+
+testcmd () {
+    command -v "$1" >/dev/null
+}
+
+# Wipe log file on every install
+echo "" > $LOGFILE
+
+installDocker() {
+    sudo apt-get update
+    sudo apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common vim git python-pip build-essential libbz2-dev zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev ntp
+    sudo systemctl enable ntp
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get update
+    sudo pip install --upgrade pip
+    sudo pip install docker-compose
+    sudo apt-get -y install docker-ce docker-ce-cli containerd.io
+}
+
+installPython(){
+    PYTHON_VERSION="3.7.6"
+    PYTHON_FILE="Python-$PYTHON_VERSION.tgz"
+    wget https://www.python.org/ftp/python/$PYTHON_VERSION/$PYTHON_FILE
+    tar -xvf $PYTHON_FILE
+    rm -rf $PYTHON_FILE
+    cd Python-$PYTHON_VERSION
+    ./configure
+    make -j 1
+    sudo make altinstall
+    cd ..
+    sudo rm -rf Python-$PYTHON_VERSION
+}
+
+installRuby(){
+    wget https://cache.ruby-lang.org/pub/ruby/2.7/ruby-2.7.0.tar.gz
+    gunzip -d ruby-2.7.0.tar.gz
+    tar -xvf ruby-2.7.0.tar
+    cd ruby-2.7.0/
+    ./configure
+    make
+    sudo make install
+    cd ..
+    rm -rf ruby-2.7.0
+}
+
+echo -e "${BOLD}${LIGHT_GREEN}[+] Updating system...${NORMAL}"
+sudo apt-get update
+sudo apt-get upgrade -y
+
+echo -e "${BOLD}${LIGHT_GREEN}[+] Installing multiple dependencies...${NORMAL}"
+sudo apt-get install -y build-essential apt-transport-https software-properties-common gcc build-dep ca-certificates dirmngr gnupg gnupg2 >> $LOGFILE 2>&1
+sudo apt-get install -y git jq gcc make libpcap-dev unzip tmux chromium-browser chromium-chromedriver >> $LOGFILE 2>&1
+sudo apt-get install -y curl wget git git-all rename screen certbot gunzip zip unzip 7zip tar p7zip-full >> $LOGFILE 2>&1
+sudo apt-get install -y openssl openssh-server openssh-client parallel vim ctags dtach dstat silversearcher-ag sslscan >> $LOGFILE 2>&1
+sudo apt-get install -y awscli macchanger secure-delete neofetch prips dpkg-dev bash-completion net-tools telnet >> $LOGFILE 2>&1
+sudo apt-get install -y rust-all >> $LOGFILE 2>&1
+sudo apt-get install -y sqlite sqlite3 sqlite3-tools sqlitebrowser  >> $LOGFILE 2>&1
+
+if ! testcmd docker; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Docker-CE...${NORMAL}"
+    installDocker
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Docker-CE...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd python3.7; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Python-3.7.6...${NORMAL}"
+    installPython
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Python-3.7.6...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd ruby; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Ruby-2.6.3...${NORMAL}"
+    installRuby
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing Ruby-2.6.3...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd npm; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing npm...${NORMAL}"
+    bash nodejs.sh
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing npm...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+if ! testcmd go; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing go...${NORMAL}"
+    bash go-lang.sh
+else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing go...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+fi
+
+
+printf "${bblue} Running: Performing last configurations ${reset}\n\n"
+## Last steps
+if [ "$generate_resolvers" = true ]; then
+	if [ ! -s "$resolvers" ] || [[ $(find "$resolvers" -mtime +1 -print) ]] ; then
+		 ${reset}\n\n"Checking resolvers lists...\n Accurate resolvers are the key to great results\n This may take around 10 minutes if it's not updated ${reset}\n\n"
+		eval rm -f $resolvers 2>>"$LOGFILE"
+		dnsvalidator -tL https://public-dns.info/nameservers.txt -threads $DNSVALIDATOR_THREADS -o $resolvers &>/dev/null
+		dnsvalidator -tL https://raw.githubusercontent.com/blechschmidt/massdns/master/lists/resolvers.txt -threads $DNSVALIDATOR_THREADS -o tmp_resolvers &>/dev/null
+		[ -s "tmp_resolvers" ] && cat tmp_resolvers | anew -q $resolvers
+		[ -s "tmp_resolvers" ] && rm -f tmp_resolvers &>/dev/null
+		[ ! -s "$resolvers" ] && wget -q -O - https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt > ${resolvers}
+        [ ! -s "$resolvers_trusted" ] && wget -q -O - https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt > ${resolvers_trusted}
+		printf "${yellow} Resolvers updated\n ${reset}\n\n"
+	fi
+	generate_resolvers=false
+else
+	[ ! -s "$resolvers" ] || if [[ $(find "$resolvers" -mtime +1 -print) ]] ; then
+		 ${reset}"\n\nChecking resolvers lists...\n Accurate resolvers are the key to great results\n Downloading new resolvers ${reset}\n\n"
+		wget -q -O - https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt > ${resolvers}
+        wget -q -O - https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt > ${resolvers_trusted}
+		printf "${yellow} Resolvers updated\n ${reset}\n\n"
+	fi
+fi
+
+
+
+
+sudo apt-get install python3-pycurl python3-bs4 python3-geoip python3-gi python3-cairocffi python3-selenium firefoxdriver
+sudo apt-get install libldns-dev -y
+apt-get install swig swig2.0 libssl-dev python-dev python-pip
+$ sudo apt install zlib libglib-dev python-setuptools quilt libssl-dev dwarfdump
+
+sudo apt-get install -y \
+    build-essential \
+    libseccomp-dev \
+    libglib2.0-dev \
+    pkg-config \
+    squashfs-tools \
+    cryptsetup \
+    runc \
+    uidmap
+
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
+source ~/.bashrc
+

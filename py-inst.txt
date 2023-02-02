@@ -1,0 +1,216 @@
+#https://misc.flogisoft.com/bash/tip_colors_and_formatting
+
+BLINK='\e[5m'
+BOLD='\e[1m'
+LIGHT_GREEN='\e[92m'
+LIGHT_YELLOW='\e[93m'
+LIGHT_CYAN='\e[96m'
+NORMAL='\e[0m'
+RED='\e[31m'
+UNDERLINE='\e[4m'
+
+testcmd () {
+    command -v "$1" >/dev/null
+}
+
+echo  "\n-----------------------------------------"
+echo  "${BOLD}${LIGHT_YELLOW}[~] Installing python tools${NORMAL}"
+echo "-----------------------------------------"
+
+pyinst {
+  which $1 &> /dev/null
+
+  if ! testcmd $1 -ne 0; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ${1}...${NORMAL}"
+    python3.7 -m pip install $1 --user
+  else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ${1}...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+  fi
+}
+
+echo  "\n-----------------------------------------"
+echo  "${BOLD}${LIGHT_YELLOW}[~] Installing python Misc tools${NORMAL}"
+echo "-----------------------------------------"
+
+pymiscinst {
+  which $2 &> /dev/null
+
+  if ! testcmd $1 -ne 0; then
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ${2}...${NORMAL}"
+    python3.7 -m pip install git+https://github.com/$2
+  else
+    echo -e "${BOLD}${LIGHT_GREEN}[+] Installing ${2}...${LIGHT_YELLOW}[ALREADY INSTALLED]${NORMAL}"
+  fi
+}
+
+
+
+pyinst pipreqs
+pyinst pyinstaller
+pyinst pip-conflict-checker
+pyinst pypi-install
+pyinst pipx
+pyinst virtualenvwrapper
+pyinst pipenv
+pyinst virtualenv
+pyinst dnspython
+pyinst dnspython>=1.16.0
+pyinst requests
+pyinst sys
+pyinst time
+pyinst datetime
+pyinst urllib3
+pyinst webbrowser
+pyinst os
+pyinst pathlib
+pyinst json
+pyinst threading
+pyinst re
+pyinst queue
+pyinst whois
+pyinst progress
+pyinst requests_futures
+pyinst paver
+pyinst argparse
+pyinst netaddr
+pyinst feedparser
+pyinst fierce
+pyinst pyopenssl
+pyinst urllib3[secure]
+pyinst mmh3
+pyinst pyopenssl
+pyinst aiodnsbrute
+pyinst dnsgen
+pyinst colored
+pyinst tldextract
+pyinst termcolor
+pyinst py-altdns==1.0.0
+pyinst py-altdns==1.0.2
+pyinst sslyze
+pyinst truffleHog
+pyinst scoutsuite
+pyinst uro
+pyinst apkleaks
+pyinst aws
+pyinst awscli
+pyinst google
+pyinst bluto
+pyinst shodan
+pyinst censys
+pyinst lolcat
+pyinst boxes
+pyinst flask
+pyinst flask_cors
+pyinst dnslib
+pyinst s3recon
+pyinst wfuzz
+pyinst tld
+pyinst fuzzywuzzy
+pyinst cf-checker
+pyinst corsair_scan
+pyinst zapcli
+pyinst pycurl
+pyinst beautifulsoup4
+pyinst pygeoip
+pyinst cairocffi
+pyinst selnium
+pyinst bs4
+pyinst certstream
+pyinst sqlalchemy
+pyinst poetry
+pyinst Click==7.0
+pyinst pycares==3.0.0
+pyinst tornado==6.0.3
+pyinst aiodns==2.0.0
+pyinst asyncio==3.4.3
+pyinst tldextract==2.2.2
+pyinst autosubtakeover
+pyinst getsploit
+
+
+pymiscinst TheRook/subbrute
+pymiscinst aboul3la/Sublist3r
+pymiscinst commixproject/commix
+pymiscinst guelfoweb/knock
+# pymiscinst appsecco/bugcrowd-levelup-subdomain-enumeration
+pymiscinst UnaPibaGeek/ctfr
+pymiscinst yassineaboukir/sublert
+pymiscinst christophetd/censys-subdomain-finder
+pymiscinst GerbenJavado/LinkFinder
+pymiscinst m4ll0k/SecretFinder
+pymiscinst nahamsec/JSParser
+pymiscinst s0md3v/Corsy
+pymiscinst dubs3c/Injectus
+pymiscinst six2dez/dorks_hunter
+pymiscinst davidtavarez/pwndb
+pymiscinst vortexau/dnsvalidator
+pymiscinst laramies/theHarvester
+pymiscinst x90skysn3k/brutespray
+pymiscinst EnableSecurity/wafw00f
+pymiscinst xnl-h4ck3r/xnLinkFinder
+pymiscinst Tuhinshubhra/CMSeeK
+pymiscinst pielco11/fav-up
+pymiscinst r0075h3ll/Oralyzer
+pymiscinst w9w/Arjun.git
+pymiscinst initstring/cloud_enum
+pymiscinst LandGrey/pydictor
+pymiscinst xnl-h4ck3r/urless
+pymiscinst defparam/smuggler
+pymiscinst cramppet/regulator
+pymiscinst D3Ext/AORT
+pymiscinst Josue87/EmailFinder
+pymiscinst pablosnt/rekono-cli
+pymiscinst jonluca/Anubis
+pymiscinst evyatarmeged/Raccoon
+pymiscinst techgaun/github-dorks
+pymiscinst BishopFox/GitGot
+pymiscinst Talkaboutcybersecurity/GitMonitor
+pymiscinst sqlmapproject/sqlmap
+pymiscinst r0oth3x49/ghauri
+pymiscinst secdev/scapy
+pymiscinst screetsec/Sudomy
+pymiscinst shmilylty/OneForAll
+pymiscinst lanmaster53/recon-ng
+pymiscinst wapiti-scanner/wapiti
+pymiscinst skavngr/rapidscan
+pymiscinst aufzayed/HydraRecon
+pymiscinst vergl4s/instarecon
+pymiscinst codingo/Interlace
+pymiscinst sa7mon/S3Scanner
+pymiscinst bhavsec/reconspider
+pymiscinst christophetd/CloudFlair
+pymiscinst maurosoria/dirsearch
+pymiscinst s0md3v/XSStrike
+pymiscinst devanshbatham/ParamSpider
+pymiscinst maaaaz/webscreenshot
+pymiscinst opsdisk/pagodo
+pymiscinst smicallef/spiderfoot
+pymiscinst maK-/parameth
+pymiscinst 0xInfection/XSRFProbe
+pymiscinst billythegoat356/Brute
+pymiscinst codingo/VHostScan
+pymiscinst jordanpotti/AWSBucketDump
+pymiscinst BishopFox/h2csmuggler
+pymiscinst anshumanpattnaik/http-request-smuggling
+pymiscinst defparam/smuggler
+pymiscinst the-robot/sqliv
+pymiscinst hahwul/a2sv
+pymiscinst swisskyrepo/SSRFmap
+pymiscinst DanMcInerney/xsscrapy
+pymiscinst TypeError/domained
+pymiscinst fleetcaptain/Turbolist3r
+pymiscinst 0xbharath/censys-enumeration
+pymiscinst skynet0x01/tugarecon
+pymiscinst cinerieus/as3nt
+pymiscinst nexxai/Substr3am
+pymiscinst BishopFox/eyeballer
+pymiscinst beurtschipper/Depix
+pymiscinst breenmachine/httpscreenshot/
+pymiscinst nccgroup/requests-racer
+pymiscinst shivsahni/NSBrute
+pymiscinst punk-security/dnsReaper
+pymiscinst tarunkant/Gopherus
+pymiscinst whitel1st/docem
+
+
+pipx install witnessme
